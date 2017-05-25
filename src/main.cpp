@@ -65,13 +65,26 @@ Eigen::VectorXd polyfit(Eigen::VectorXd xvals, Eigen::VectorXd yvals,
   return result;
 }
 
+
+void map2car(vector<double>& ptsx, vector<double>& ptsy, double px, double py, double psi)
+{
+  for (int i=0; i<ptsx.size(); i++)
+  {
+    double dx = ptsx[i] - px;
+    double dy = ptsy[i] - py;
+    ptsx[i] = dx*cos(psi) + dy*sin(psi);
+    ptsy[i] = dx*sin(psi) - dy*cos(psi);
+  }
+}
+
+
 int main() {
   uWS::Hub h;
 
   // MPC is initialized here!
   MPC mpc;
 
-  h.onMessage([&mpc](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  h.onMessage([&mpc](uWS::WebSocket<uWS::SERVER> *ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -92,14 +105,40 @@ int main() {
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
 
+          map2car(ptsx, ptsy, px, py, psi);
+          
+          //cout << "ptsx[0]: " << ptsx[0] << endl;
+          //cout << "ptsy[0]: " << ptsy[0] << endl;
+          
           /*
-          * TODO: Calculate steeering angle and throttle using MPC.
+          * Calculate steeering angle and throttle using MPC.
           *
           * Both are in between [-1, 1].
           *
           */
+          Eigen::VectorXd ptsx1 = Eigen::Map<Eigen::VectorXd>(ptsx.data(), ptsx.size());
+          Eigen::VectorXd ptsy1 = Eigen::Map<Eigen::VectorXd>(ptsy.data(), ptsy.size());
           double steer_value;
           double throttle_value;
+          auto coeffs = polyfit(ptsx1, ptsy1, 3);
+
+          // The cross track error is calculated by evaluating at polynomial at x, f(x)
+          // and subtracting y.
+          double cte = polyeval(coeffs, 0);
+          // Due to the sign starting at 0, the orientation error is -f'(x).
+          // derivative of coeffs[0] + coeffs[1] * x -> coeffs[1]
+          double epsi = -atan(coeffs[1]);
+        
+          Eigen::VectorXd state(6);
+          state << px, py, psi, v, cte, epsi;
+        
+          auto vars = mpc.Solve(state, coeffs);
+          
+          //state << vars[0], vars[1], vars[2], vars[3], vars[4], vars[5];
+          std::cout << state << std::endl;
+          steer_value = vars[6];
+          throttle_value = vars[7];
+
 
           json msgJson;
           msgJson["steering_angle"] = steer_value;
@@ -138,12 +177,12 @@ int main() {
           // NOTE: REMEMBER TO SET THIS TO 100 MILLISECONDS BEFORE
           // SUBMITTING.
           this_thread::sleep_for(chrono::milliseconds(100));
-          ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+          ws->send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
       } else {
         // Manual driving
         std::string msg = "42[\"manual\",{}]";
-        ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+        ws->send(msg.data(), msg.length(), uWS::OpCode::TEXT);
       }
     }
   });
@@ -162,13 +201,13 @@ int main() {
     }
   });
 
-  h.onConnection([&h](uWS::WebSocket<uWS::SERVER> ws, uWS::HttpRequest req) {
+  h.onConnection([&h](uWS::WebSocket<uWS::SERVER> *ws, uWS::HttpRequest req) {
     std::cout << "Connected!!!" << std::endl;
   });
 
-  h.onDisconnection([&h](uWS::WebSocket<uWS::SERVER> ws, int code,
+  h.onDisconnection([&h](uWS::WebSocket<uWS::SERVER> *ws, int code,
                          char *message, size_t length) {
-    ws.close();
+    ws->close();
     std::cout << "Disconnected" << std::endl;
   });
 
