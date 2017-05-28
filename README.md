@@ -32,75 +32,59 @@ Self-Driving Car Engineer Nanodegree Program
 * Simulator. You can download these from the [releases tab](https://github.com/udacity/CarND-MPC-Project/releases).
 * Not a dependency but read the [DATA.md](./DATA.md) for a description of the data sent back from the simulator.
 
-
 ## Basic Build Instructions
-
 
 1. Clone this repo.
 2. Make a build directory: `mkdir build && cd build`
 3. Compile: `cmake .. && make`
 4. Run it: `./mpc`.
 
-## Tips
+## Model
+The motion model for the car is based on CRTV (Constant Rate of Turn and Velocity) between the actuation steps assuming actuations are atomic. The state is defined as a 6 dimension vector as follows:
+	x - position on the x axis
+	y - position on the y axis
+	psi - orientation
+	v - speed of the vehicle
+	cte - cross track error
+	epsi - orientation error
+All values are based on vehicle coordinate system (current position and orientation are 0)
+Under this model the transition of the state between the steps is defined as follows:
+	x_[t+1] = x[t] + v[t] * cos(psi[t]) * dt
+	y_[t+1] = y[t] + v[t] * sin(psi[t]) * dt
+	psi_[t+1] = psi[t] + v[t] / Lf * delta[t] * dt
+	v_[t+1] = v[t] + a[t] * dt
+	cte[t+1] = f(x[t]) - y[t] + v[t] * sin(epsi[t]) * dt
+	epsi[t+1] = psi[t] - psides[t] + v[t] * delta[t] / Lf * dt
+ 
+## Planning Horizon
+The number of steps and duration of each step were chosen empirically as follows:
+ N  = 9   - longest visible horizon while driving at 60mph
+ dt = 0.2 - shortest time between actuations (including all latency sources)
+Lower values of dt cause oscilations because the actuation is performed to late after accounting for the latency, higher values reduce the controllabily of the vehicle and required reducing speed.
+As for the N - with smaller values the planning horizon is too close and might result in more agresive actuations which cause oscilations. Higher values are not usefull because they exceed the curvature represented by the waypoints.
 
-1. It's recommended to test the MPC on basic examples to see if your implementation behaves as desired. One possible example
-is the vehicle starting offset of a straight line (reference). If the MPC implementation is correct, after some number of timesteps
-(not too many) it should find and track the reference line.
-2. The `lake_track_waypoints.csv` file has the waypoints of the lake track. You could use this to fit polynomials and points and see of how well your model tracks curve. NOTE: This file might be not completely in sync with the simulator so your solution should NOT depend on it.
-3. For visualization this C++ [matplotlib wrapper](https://github.com/lava/matplotlib-cpp) could be helpful.
+## Coordinate System
+The waypoints are received from the simulator in absolute coordinate system (map coordinates) but the state is expressed in vehicle coordinate system. Therefore the code performs conversion from map to car coordinate system as follows:
+    double dx = ptsx[i] - px;
+    double dy = ptsy[i] - py;
+    ptsx[i] = dx*cos(psi) + dy*sin(psi);
+    ptsy[i] = -(dx*sin(psi) - dy*cos(psi));
 
-## Editor Settings
+## Latency
+There are three main latency sources in the system:
+	Syntetic - a sleep command of 100ms in the MPC code to simulate fixed latency
+	Computational - the time it takes for optimizer to find the optimatal actuation values, can vary depending on the machine but usually < 100ms
+	Network - when running the simulator and the controller code on different machines connected by network (such as runnig the simulator on the laptop and controller on AWS instance), network delay is introduced that can be 20ms-100ms depending on the location. This latency is not fixed like the synthetic one and can vary between the frames
+Unfortenatuly the network latency presents a big problem due to the latency jitter therefore even if the code uses some fixed actuation step in the future and assumes that control values are held constant before that step it will not work when the latency changes. The only way to deal with this problem is to increase dt which guarantees that the time between steps is larger than the time between possible acutations. The downside of it is reduced controllability, meaning that on sharp turns the speed must be reduced to achieve controllability
 
-We've purposefully kept editor configuration files out of this repo in order to
-keep it as simple and environment agnostic as possible. However, we recommend
-using the following settings:
-
-* indent using spaces
-* set tab width to 2 spaces (keeps the matrices in source code aligned)
-
-## Code Style
-
-Please (do your best to) stick to [Google's C++ style guide](https://google.github.io/styleguide/cppguide.html).
-
-## Project Instructions and Rubric
-
-Note: regardless of the changes you make, your project must be buildable using
-cmake and make!
-
-More information is only accessible by people who are already enrolled in Term 2
-of CarND. If you are enrolled, see [the project page](https://classroom.udacity.com/nanodegrees/nd013/parts/40f38239-66b6-46ec-ae68-03afd8a601c8/modules/f1820894-8322-4bb3-81aa-b26b3c6dcbaf/lessons/b1ff3be0-c904-438e-aad3-2b5379f0e0c3/concepts/1a2255a0-e23c-44cf-8d41-39b8a3c8264a)
-for instructions and the project rubric.
-
-## Hints!
-
-* You don't have to follow this directory structure, but if you do, your work
-  will span all of the .cpp files here. Keep an eye out for TODOs.
-
-## Call for IDE Profiles Pull Requests
-
-Help your fellow students!
-
-We decided to create Makefiles with cmake to keep this project as platform
-agnostic as possible. Similarly, we omitted IDE profiles in order to we ensure
-that students don't feel pressured to use one IDE or another.
-
-However! I'd love to help people get up and running with their IDEs of choice.
-If you've created a profile for an IDE that you think other students would
-appreciate, we'd love to have you add the requisite profile files and
-instructions to ide_profiles/. For example if you wanted to add a VS Code
-profile, you'd add:
-
-* /ide_profiles/vscode/.vscode
-* /ide_profiles/vscode/README.md
-
-The README should explain what the profile does, how to take advantage of it,
-and how to install it.
-
-Frankly, I've never been involved in a project with multiple IDE profiles
-before. I believe the best way to handle this would be to keep them out of the
-repo root to avoid clutter. My expectation is that most profiles will include
-instructions to copy files to a new location to get picked up by the IDE, but
-that's just a guess.
-
-One last note here: regardless of the IDE used, every submitted project must
-still be compilable with cmake and make./
+## Dynamic Adaptability
+Due to (mostly) latency constraints the controller is unable to handle sharp turns with speeds exceeding 35mph, however on more straight sections of the track the speed can be increased. To achieve that several constraints and dependencies were introduced to the code as follows:
+	Speed - the reference speed depends on the curvature of the polynomial representing the waypoints and the current CTE `double ref_v = ref_v = 25 + 0.4*curv_factor - fabs(coeffs[0])`
+	Sequential actuations gap - the weight of the gap between sequential actuations in cost function depends on the curvature of the road - the higher the curvature the lower is the minimization weight.
+	Drag - to model deccelaration created by friction a constant decceleration factor of 0.05 is substructed from every actuation value
+	Turn rate - is dynamically constrained by inversly dependent on the speed - the higher the speed the lower are the steering values (in absolute terms)
+	Location - the controller assumes that the vehicle moves forward, therefore in car coordinate system the location value on the x axis must monotonically increase
+	
+## Results
+Below is a video showing simulator running at an average 60mph on a laptop, sending telemetry over the network to AWS server running the controller (this code) and receiving back the actuation commands and planned path. On top of that syntetic latency of 100ms for each from is introduced in the code as per the project requirements:
+[![Watch the video](https://j.gifs.com/DRvyK5.gif)](https://youtu.be/wXaEUJdqAa8)
