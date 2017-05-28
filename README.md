@@ -40,51 +40,60 @@ Self-Driving Car Engineer Nanodegree Program
 4. Run it: `./mpc`.
 
 ## Model
-The motion model for the car is based on CRTV (Constant Rate of Turn and Velocity) between the actuation steps assuming actuations are atomic. The state is defined as a 6 dimension vector as follows:
+The motion model for the car is based on CRTV (Constant Rate of Turn and Velocity) between the actuation steps assuming actuations are atomic. The state is defined as a six-dimension vector as follows:
+```
 	x - position on the x axis
 	y - position on the y axis
 	psi - orientation
 	v - speed of the vehicle
 	cte - cross track error
 	epsi - orientation error
+```
 All values are based on vehicle coordinate system (current position and orientation are 0)
 Under this model the transition of the state between the steps is defined as follows:
+```
 	x_[t+1] = x[t] + v[t] * cos(psi[t]) * dt
 	y_[t+1] = y[t] + v[t] * sin(psi[t]) * dt
 	psi_[t+1] = psi[t] + v[t] / Lf * delta[t] * dt
 	v_[t+1] = v[t] + a[t] * dt
 	cte[t+1] = f(x[t]) - y[t] + v[t] * sin(epsi[t]) * dt
 	epsi[t+1] = psi[t] - psides[t] + v[t] * delta[t] / Lf * dt
- 
+``` 
+
 ## Planning Horizon
 The number of steps and duration of each step were chosen empirically as follows:
- N  = 9   - longest visible horizon while driving at 60mph
- dt = 0.2 - shortest time between actuations (including all latency sources)
-Lower values of dt cause oscilations because the actuation is performed to late after accounting for the latency, higher values reduce the controllabily of the vehicle and required reducing speed.
-As for the N - with smaller values the planning horizon is too close and might result in more agresive actuations which cause oscilations. Higher values are not usefull because they exceed the curvature represented by the waypoints.
+* N  = 9   - longest visible horizon while driving at 60mph
+* dt = 0.2 - shortest time between actuations (including all latency sources)
+
+Lower values of dt cause oscillations because the actuation is performed to late after accounting for the latency, higher values reduce the controllability of the vehicle and required reducing speed.
+As for the N - with smaller values the planning horizon is too close and might result in more aggressive actuations which cause oscillations. Higher values are not useful because they exceed the curvature represented by the waypoints.
 
 ## Coordinate System
-The waypoints are received from the simulator in absolute coordinate system (map coordinates) but the state is expressed in vehicle coordinate system. Therefore the code performs conversion from map to car coordinate system as follows:
+The waypoints are received from the simulator in absolute coordinate system (map coordinates) but the state is expressed in vehicle coordinate system. Therefore, the code performs conversion from map to car coordinate system as follows:
+```
     double dx = ptsx[i] - px;
     double dy = ptsy[i] - py;
     ptsx[i] = dx*cos(psi) + dy*sin(psi);
     ptsy[i] = -(dx*sin(psi) - dy*cos(psi));
+```
 
 ## Latency
 There are three main latency sources in the system:
-	Syntetic - a sleep command of 100ms in the MPC code to simulate fixed latency
-	Computational - the time it takes for optimizer to find the optimatal actuation values, can vary depending on the machine but usually < 100ms
-	Network - when running the simulator and the controller code on different machines connected by network (such as runnig the simulator on the laptop and controller on AWS instance), network delay is introduced that can be 20ms-100ms depending on the location. This latency is not fixed like the synthetic one and can vary between the frames
-Unfortenatuly the network latency presents a big problem due to the latency jitter therefore even if the code uses some fixed actuation step in the future and assumes that control values are held constant before that step it will not work when the latency changes. The only way to deal with this problem is to increase dt which guarantees that the time between steps is larger than the time between possible acutations. The downside of it is reduced controllability, meaning that on sharp turns the speed must be reduced to achieve controllability
+* Synthetic - a sleep command of 100ms in the MPC code to simulate fixed latency
+* Computational - the time it takes for optimizer to find the optimal actuation values, can vary depending on the machine but usually < 100ms
+* Network - when running the simulator and the controller code on different machines connected by network (such as running the simulator on the laptop and controller on AWS instance), network delay is introduced that can be 20ms-100ms depending on the location. This latency is not fixed like the synthetic one and can vary between the frames
+
+Unfortunately the network latency presents a big problem due to the latency jitter therefore even if the code uses some fixed actuation step in the future and assumes that control values are held constant before that step it will not work when the latency changes. The only way to deal with this problem is to increase dt which guarantees that the time between steps is larger than the time between possible actuations. The downside of it is reduced controllability, meaning that on sharp turns the speed must be reduced to achieve controllability
 
 ## Dynamic Adaptability
 Due to (mostly) latency constraints the controller is unable to handle sharp turns with speeds exceeding 35mph, however on more straight sections of the track the speed can be increased. To achieve that several constraints and dependencies were introduced to the code as follows:
-	Speed - the reference speed depends on the curvature of the polynomial representing the waypoints and the current CTE `double ref_v = ref_v = 25 + 0.4*curv_factor - fabs(coeffs[0])`
-	Sequential actuations gap - the weight of the gap between sequential actuations in cost function depends on the curvature of the road - the higher the curvature the lower is the minimization weight.
-	Drag - to model deccelaration created by friction a constant decceleration factor of 0.05 is substructed from every actuation value
-	Turn rate - is dynamically constrained by inversly dependent on the speed - the higher the speed the lower are the steering values (in absolute terms)
-	Location - the controller assumes that the vehicle moves forward, therefore in car coordinate system the location value on the x axis must monotonically increase
-	
+* Speed - the reference speed depends on the curvature of the polynomial representing the waypoints and the current CTE `double ref_v = ref_v = 25 + 0.4*curv_factor - fabs(coeffs[0])`
+* Sequential actuations gap - the weight of the gap between sequential actuations in cost function depends on the curvature of the road - the higher the curvature the lower is the minimization weight.
+* Drag - to model deceleration created by friction a constant deceleration factor of 0.05 is subtracted from every actuation value
+* Turn rate - is dynamically constrained by inversely dependent on the speed - the higher the speed the lower are the steering values (in absolute terms)
+* Location - the controller assumes that the vehicle moves forward, therefore in car coordinate system the location value on the x axis must monotonically increase
+
 ## Results
-Below is a video showing simulator running at an average 60mph on a laptop, sending telemetry over the network to AWS server running the controller (this code) and receiving back the actuation commands and planned path. On top of that syntetic latency of 100ms for each from is introduced in the code as per the project requirements:
+Below is a video showing simulator running at an average 60mph on a laptop, sending telemetry over the network to AWS server running the controller (this code) and receiving back the actuation commands and planned path. On top of that synthetic latency of 100ms for each from is introduced in the code as per the project requirements:
+
 [![Watch the video](https://j.gifs.com/DRvyK5.gif)](https://youtu.be/wXaEUJdqAa8)
