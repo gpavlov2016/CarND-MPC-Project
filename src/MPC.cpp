@@ -54,7 +54,7 @@ class FG_eval {
     for (int i = 0; i < N; i++) {
       double ref_cte = 0;
       double ref_epsi = 0;
-      double ref_v = ref_v = 25 + 0.4*curv_factor - fabs(coeffs[0]);
+      double ref_v = 25 + 0.4*curv_factor - fabs(coeffs[0]);
       //cout << "vars[cte_start + i]: " << vars[cte_start + i] << endl;
       fg[0] += CppAD::pow(0.5*vars[cte_start + i] - ref_cte, 4);
       fg[0] += CppAD::pow(5*vars[epsi_start + i] - ref_epsi, 2);
@@ -154,9 +154,9 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   bool ok = true;
   size_t i;
 
-  double x = 0;//state[0];
-  double y = 0;//state[1];
-  double psi = 0;//state[2];
+  double x = state[0];
+  double y = state[1];
+  double psi = state[2];
   double v = state[3];
   double cte = state[4];
   double epsi = state[5];

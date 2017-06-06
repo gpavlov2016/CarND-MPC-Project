@@ -9,6 +9,18 @@
 #include "MPC.h"
 #include "json.hpp"
 
+// This value assumes the model presented in the classroom is used.
+//
+// It was obtained by measuring the radius formed by running the vehicle in the
+// simulator around in a circle with a constant steering angle and velocity on a
+// flat terrain.
+//
+// Lf was tuned until the the radius formed by the simulating the model
+// presented in the classroom matched the previous radius.
+//
+// This is the length from front to CoG that has a similar radius.
+const double Lf = 2.67;
+
 // for convenience
 using json = nlohmann::json;
 
@@ -77,6 +89,30 @@ void map2car(vector<double>& ptsx, vector<double>& ptsy, double px, double py, d
   }
 }
 
+void apply_latency(Eigen::VectorXd &state, double delta, double a, Eigen::VectorXd coeffs, double dt=0.1) {
+  double x = state[0];
+  double y = state[1];
+  double psi = state[2];
+  double v = state[3];
+  double cte = state[4];
+  double epsi = state[5];
+
+  state[0] = x + v * cos(psi) * dt;
+  state[1] = y + v * sin(psi) * dt;
+  state[2] = psi + v / Lf * delta * dt;
+  state[3] = v + a * dt;
+  state[4] = polyeval(coeffs, state[0]) - state[1];
+  state[5] = psi - atan(coeffs[1]) + v * delta / Lf * dt;
+
+  cout << "after latency: " << state << endl;
+      // x_[t+1] = x[t] + v[t] * cos(psi[t]) * dt
+      // y_[t+1] = y[t] + v[t] * sin(psi[t]) * dt
+      // psi_[t+1] = psi[t] + v[t] / Lf * delta[t] * dt
+      // v_[t+1] = v[t] + a[t] * dt
+      // cte[t+1] = f(x[t]) - y[t] + v[t] * sin(epsi[t]) * dt
+      // epsi[t+1] = psi[t] - psides[t] + v[t] * delta[t] / Lf * dt
+
+}
 
 int main() {
   uWS::Hub h;
@@ -104,6 +140,8 @@ int main() {
           double py = j[1]["y"];
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
+          double delta = j[1]["steering_angle"];
+          double a = j[1]["throttle"];
           //Display the waypoints/reference line
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Yellow line
@@ -133,7 +171,11 @@ int main() {
           double epsi = psi - atan(coeffs[1]);
         
           Eigen::VectorXd state(6);
-          state << px, py, psi, v, cte, epsi;
+          // Vehicle coordinates here:
+          
+          state << 0, 0, 0, v, cte, epsi;
+          
+          apply_latency(state, delta, a, coeffs, 0.1);
         
           auto vars = mpc.Solve(state, coeffs);
           
