@@ -6,8 +6,8 @@
 using CppAD::AD;
 
 //Set the timestep length and duration
-size_t N = 9;
-double dt = 0.2;
+size_t N = 15;
+double dt = 0.05;
 
 // Both the reference cross track and orientation errors are 0.
 
@@ -55,9 +55,10 @@ class FG_eval {
       double ref_cte = 0;
       double ref_epsi = 0;
       double ref_v = 25 + 0.4*curv_factor - fabs(coeffs[0]);
+      ref_v = 50;
       //cout << "vars[cte_start + i]: " << vars[cte_start + i] << endl;
-      fg[0] += CppAD::pow(0.5*vars[cte_start + i] - ref_cte, 4);
-      fg[0] += CppAD::pow(5*vars[epsi_start + i] - ref_epsi, 2);
+      fg[0] += CppAD::pow(vars[cte_start + i] - ref_cte, 2);
+      fg[0] += 100*CppAD::pow(vars[epsi_start + i] - ref_epsi, 2);
       fg[0] += CppAD::pow(vars[v_start + i] - ref_v, 2);
     }
 
@@ -66,6 +67,7 @@ class FG_eval {
       fg[0] += CppAD::pow(vars[delta_start + i], 2);
       fg[0] += CppAD::pow(vars[a_start + i], 2);
     }
+
 /*
     // Minimize angle changes.
     for (int i = 0; i < N - 1; i++) {
@@ -75,7 +77,7 @@ class FG_eval {
     // Minimize the value gap between sequential actuations.
     for (int i = 0; i < N - 2; i++) {
       AD<double> epsi0 = vars[epsi_start + i];
-      fg[0] += CppAD::pow(0.04*curv_factor*(vars[delta_start + i + 1] - vars[delta_start + i]), 2);
+      fg[0] += 100*CppAD::pow((vars[delta_start + i + 1] - vars[delta_start + i]), 2);
       fg[0] += CppAD::pow((vars[a_start + i + 1] - vars[a_start + i]), 2);
     }
   
@@ -198,8 +200,8 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   // The upper and lower limits of delta are set to -25 and 25
   // degrees (values in radians).
   for (int i = delta_start; i < a_start; i++) {
-    vars_upperbound[i] =  min(20*1/v, 1.0);
-    vars_lowerbound[i] = -min(20*1/v, 1.0);
+    vars_upperbound[i] =  0.5; //min(20*1/v, 1.0);
+    vars_lowerbound[i] = -0.5; //-min(20*1/v, 1.0);
     //cout << "vars_upperbound[i]: " << vars_upperbound[i] << endl;
      
   }

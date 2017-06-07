@@ -99,10 +99,10 @@ void apply_latency(Eigen::VectorXd &state, double delta, double a, Eigen::Vector
 
   state[0] = x + v * cos(psi) * dt;
   state[1] = y + v * sin(psi) * dt;
-  state[2] = psi + v / Lf * delta * dt;
+  state[2] = psi - v / Lf * delta * dt;
   state[3] = v + a * dt;
-  state[4] = polyeval(coeffs, state[0]) - state[1];
-  state[5] = psi - atan(coeffs[1]) + v * delta / Lf * dt;
+  //state[4] = polyeval(coeffs, state[0]) - state[1];
+  //state[5] = psi - atan(coeffs[1]) + v * delta / Lf * dt;
 
   cout << "after latency: " << state << endl;
       // x_[t+1] = x[t] + v[t] * cos(psi[t]) * dt
@@ -120,7 +120,7 @@ int main() {
   // MPC is initialized here!
   MPC mpc;
 
-  h.onMessage([&mpc](uWS::WebSocket<uWS::SERVER> *ws, char *data, size_t length,
+  h.onMessage([&mpc](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -223,12 +223,12 @@ int main() {
           // NOTE: REMEMBER TO SET THIS TO 100 MILLISECONDS BEFORE
           // SUBMITTING.
           this_thread::sleep_for(chrono::milliseconds(100));
-          ws->send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+          ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
       } else {
         // Manual driving
         std::string msg = "42[\"manual\",{}]";
-        ws->send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+        ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
       }
     }
   });
@@ -247,13 +247,13 @@ int main() {
     }
   });
 
-  h.onConnection([&h](uWS::WebSocket<uWS::SERVER> *ws, uWS::HttpRequest req) {
+  h.onConnection([&h](uWS::WebSocket<uWS::SERVER> ws, uWS::HttpRequest req) {
     std::cout << "Connected!!!" << std::endl;
   });
 
-  h.onDisconnection([&h](uWS::WebSocket<uWS::SERVER> *ws, int code,
+  h.onDisconnection([&h](uWS::WebSocket<uWS::SERVER> ws, int code,
                          char *message, size_t length) {
-    ws->close();
+    ws.close();
     std::cout << "Disconnected" << std::endl;
   });
 
