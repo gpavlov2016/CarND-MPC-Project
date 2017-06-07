@@ -95,4 +95,4 @@ Due to (mostly) latency constraints the controller is unable to handle sharp tur
 
 ## Results
 Below is a video showing simulator running at an average 60mph on a laptop, sending telemetry over the network to AWS server running the controller (this code) and receiving back the actuation commands and planned path. On top of that synthetic latency of 100ms for each from is introduced in the code as per the project requirements.
-[![Adaptable MPC Controller](http://j.gifs.com/DRvyK5.gif)](https://youtu.be/wXaEUJdqAa8)
+[![Adaptable MPC Controller](http://j.gifs.com/DRvyK5.gif)](https://youtu.be/Ee6UDM1bswg)
