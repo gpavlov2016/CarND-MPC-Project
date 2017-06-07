@@ -6,8 +6,8 @@
 using CppAD::AD;
 
 //Set the timestep length and duration
-size_t N = 15;
-double dt = 0.05;
+size_t N = 9;
+double dt = 0.1;
 
 // Both the reference cross track and orientation errors are 0.
 
@@ -54,11 +54,11 @@ class FG_eval {
     for (int i = 0; i < N; i++) {
       double ref_cte = 0;
       double ref_epsi = 0;
-      double ref_v = 25 + 0.4*curv_factor - fabs(coeffs[0]);
-      ref_v = 50;
+      double ref_v = 40 + 0.5*curv_factor - fabs(coeffs[0]);
+      //ref_v = 100;
       //cout << "vars[cte_start + i]: " << vars[cte_start + i] << endl;
       fg[0] += CppAD::pow(vars[cte_start + i] - ref_cte, 2);
-      fg[0] += 100*CppAD::pow(vars[epsi_start + i] - ref_epsi, 2);
+      fg[0] += 20*CppAD::pow(vars[epsi_start + i] - ref_epsi, 2);
       fg[0] += CppAD::pow(vars[v_start + i] - ref_v, 2);
     }
 
@@ -77,7 +77,7 @@ class FG_eval {
     // Minimize the value gap between sequential actuations.
     for (int i = 0; i < N - 2; i++) {
       AD<double> epsi0 = vars[epsi_start + i];
-      fg[0] += 100*CppAD::pow((vars[delta_start + i + 1] - vars[delta_start + i]), 2);
+      fg[0] += CppAD::pow((vars[delta_start + i + 1] - vars[delta_start + i]), 2);
       fg[0] += CppAD::pow((vars[a_start + i + 1] - vars[a_start + i]), 2);
     }
   
@@ -212,6 +212,7 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     vars_upperbound[i] = 1.0;
   }
 
+/*
   //Assume a speed range of 0.5v-2v
   for (int i = 0; i < N; i++) {
     vars_lowerbound[x_start+i] = 0.5*v*dt*i;
@@ -219,7 +220,7 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     //vars_upperbound[cte_start+i] =  3.5;// (1+50*fabs(coeffs[1]));
     //vars_lowerbound[cte_start+i] = -3.0;//-(1+50*fabs(coeffs[1]));
   }
-
+*/
   //Assume previous activations hold in the latency period
   if (m_solution.x.size() > 0 && latency_n > 0) {
     for (int i = 0; i < latency_n; i++) {
